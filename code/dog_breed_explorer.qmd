@@ -1,0 +1,787 @@
+---
+title: "Dog Breed Explorer"
+subtitle: "Understanding Modern Dog Breeds Through Data Visualizations"
+Author: Kevin Linares
+format: 
+  html:
+    theme: cosmo
+    code-fold: true
+    toc: true
+    toc-location: right
+    page-layout: full
+    embed-resources: true
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+pacman::p_load(viridis, leaflet, scales, patchwork, 
+               crosstalk, plotly, htmltools, 
+               jsonlite, tidyverse)
+
+
+# Set consistent theme following data-ink ratio principles
+theme_set(theme_minimal(base_size = 13) +
+  theme(
+    plot.title = 
+      element_text(face = "bold", size = 16, hjust = 0),
+    plot.subtitle = 
+      element_text(size = 12, color = "gray30", hjust = 0),
+    axis.title = 
+      element_text(size = 11),
+    legend.position = "top",
+    panel.grid.minor = 
+      element_blank(),
+    panel.grid.major = 
+      element_line(color = "gray90", linewidth = 0.25),
+    plot.background = 
+      element_rect(fill = "white", color = NA),
+    panel.background = 
+      element_rect(fill = "white", color = NA),
+    strip.text = 
+      element_text(face = "bold", size = 11),
+    strip.background = 
+      element_rect(fill = "gray95", color = NA)
+  ))
+```
+
+```{r load-data}
+# Load and prepare data
+
+repo_path <- "D://repos/Who_let_the_dogs_stat/data/"
+
+#____________________Data Ingestion______________________
+dogs <- read_csv(str_c(repo_path, "dogs_breed_aggregated.csv")) |>
+  mutate(
+    breed_size = factor(breed_size, 
+                       levels = 
+                         c("Very Small", "Small", "Medium",
+                           "Large", "Very Large")),
+    # Simplify breed groups for clarity
+    breed_group_simple = case_when(
+      breed_group == "Mixed Breed Dogs" ~ "Mixed Breed",
+      breed_group == "Hybrid Dogs" ~ "Mixed Breed",
+      TRUE ~ str_remove(breed_group, " Dogs")),
+    breed_group_simple = factor(breed_group_simple))
+```
+
+::: {.callout-note icon="false"}
+# About This Dashboard
+
+This tool was developed to explore data on modern dog breeds from [dogTime](https://dogtime.com/), which is a website that maintains information on dog breeds and since it is standardized it makes for an easy way to scrape data. DogTime also keeps ratings of dogs, for instance trainability, energy, or exercise needs, with a scale from 1 = low to 5 = high.These data were scraped and served on [kaggle](https://www.kaggle.com/code/yonkotoshiro/dogs-breed). This dashboard attempts to provide the user with a snapshot of the distribution of dog breeds across all of the American Kennel Club (AKC) dog groups. We attempt to also understand modern dog breeds through data visualizations of behavioral traits.
+:::
+
+------------------------------------------------------------------------
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   This visual highlights key information for the reader to consume without spending too much time on it.
+
+## Technique
+
+-   Below we present a colored a modified key performance indicator graphic that captures some overall information on this dataset for any reader to quickly glance and get an idea of what this data may contain.
+
+## Data
+
+-   This dataset contains AKC registered dog breeds in addition to hybrid wolf breeds, and new breeds that are emerging such as "goldendoodle".
+
+## Key Finding
+
+-   From this visual, we can quickly see how many breeds are in the dataset, average life span, and the most common breed group in addition to the healthiest. We wanted to keep this visual appealing and quick to cognitively process so we kept it to only 4 pieces of information.\
+:::
+
+```{r kpi-cards}
+# Calculate advanced KPIs
+total_breeds <- nrow(dogs)
+
+avg_lifespan <- round(mean(dogs$avg_life_span_years, 
+                           na.rm = TRUE), 1)
+
+most_common_group <- dogs|> 
+  count(breed_group)|> 
+  slice_max(n, n = 1)|> 
+  pull(breed_group)
+
+healthiest_size <- dogs|>
+  group_by(breed_size)|>
+  summarise(avg_health = mean(general_health, na.rm = TRUE))|>
+  slice_max(avg_health, n = 1)|>
+  pull(breed_size)
+
+# Create enhanced KPI cards - HORIZONTAL LAYOUT
+div(class = "row kpi-container",
+  div(class = "col-md-3 col-sm-6",
+    div(class = "info-box bg-primary",
+      style = "padding: 20px; margin: 10px; border-radius: 10px; color: white; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);",
+      h3(total_breeds, style = "margin: 0; font-size: 48px;"),
+      p("Total Breeds Analyzed", style = "margin: 10px 0 0 0; font-weight: 600;"),
+      p(paste0("+", round(total_breeds / 400 * 100, 0), "% Coverage"), 
+        style = "margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;")
+    )
+  ),
+  div(class = "col-md-3 col-sm-6",
+    div(class = "info-box bg-success",
+      style = "padding: 20px; margin: 10px; border-radius: 10px; color: white; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);",
+      h3(paste0(avg_lifespan, " years"), style = "margin: 0; font-size: 48px;"),
+      p("Average Lifespan", style = "margin: 10px 0 0 0; font-weight: 600;"),
+      p("Range: 8-18 years", style = "margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;")
+    )
+  ),
+  div(class = "col-md-3 col-sm-6",
+    div(class = "info-box bg-info",
+      style = "padding: 20px; margin: 10px; border-radius: 10px; color: white; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);",
+      h3(most_common_group, style = "margin: 0; font-size: 36px;"),
+      p("Most Common Group", style = "margin: 10px 0 0 0; font-weight: 600;"),
+      p(paste0(round(sum(dogs$breed_group == most_common_group) / total_breeds * 100, 0), "% of breeds"),
+        style = "margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;")
+    )
+  ),
+  div(class = "col-md-3 col-sm-6",
+    div(class = "info-box bg-warning",
+      style = "padding: 20px; margin: 10px; border-radius: 10px; color: white; background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);",
+      h3(healthiest_size, style = "margin: 0; font-size: 48px;"),
+      p("Healthiest Size", style = "margin: 10px 0 0 0; font-weight: 600;"),
+      p(paste0("Health Score: ", 
+               round(dogs|> 
+                       filter(breed_size == healthiest_size)|> 
+                       summarise(mean(general_health, na.rm = TRUE))|> 
+                       pull(), 2)),
+        style = "margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;")
+    )
+  )
+)
+```
+
+# Distribution of Breeds
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   With this visual we want to answer the question about how are breeds distributed, which breeds are nested in two categories; breed groups and breed size as denoted by AKC.
+
+## Technique
+
+-   We create a mosaic plot to capture visually the proportional distribution of breeds by size and group.
+
+## Data
+
+-   We use each breeds recorded information on the group they fall in and their size.
+
+## Key Finding
+
+-   **Very Large breeds dominate** the dataset (53%), followed by Medium (20%) and Large (17%). This distribution reflects both historical breeding purposes (working, hunting) and modern popularity of larger companion breeds.
+
+-   **Group patterns:** Working and Mixed breeds are heavily represented in larger sizes, while Companion breeds cluster in smaller sizes.
+:::
+
+```{r distribution-viz, fig.width=11, fig.height=8}
+
+p <- dogs |>
+  count(breed_group_simple, breed_size) |>
+  group_by(breed_group_simple) |>
+  mutate(prop = n / sum(n)) |>
+  ggplot(aes(x = breed_group_simple, y = breed_size, fill = breed_size,
+             text = paste0("<b>", breed_group_simple, "</b>",
+                           "<br>Size: ", breed_size,
+                           "<br>Share: ", scales::percent(prop, accuracy = 1),
+                           "<br>Count: ", n))) +
+  geom_tile(aes(alpha = prop), color = "white", linewidth = 0.8) +
+  geom_text(aes(label = ifelse(prop >= 0.05,
+                               scales::percent(prop, accuracy = 1),
+                               "")),
+            size = 4, fontface = "bold", color = "white") +
+  scale_fill_viridis_d(option = "E", end = 0.90, name = "Breed Size") +
+  scale_alpha_continuous(range = c(0.35, 1), guide = "none") +
+  labs(x = NULL, y = "Breed Size") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "bottom"
+  )
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    title = list(
+      text = paste0(
+        "Distribution of Dog Breeds by Size and Group",
+        "<br><sup>Most breeds are classified as Very Large,",
+        " with Working and Mixed breeds dominating larger sizes</sup>"
+      ),
+      font = list(size = 14),
+      x = 0,
+      xanchor = "left"
+    ),
+    legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = -0.40,
+      tracegroupgap = 0,   # collapse gap between legend groups
+      itemwidth = 40,      # controls width of each legend item box
+      font = list(size = 10)  # shrink text so items don't collide
+    ),
+    margin = list(t = 100, b = 160)
+  )
+```
+
+------------------------------------------------------------------------
+
+# Distinct Breed Characteristics
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   This visual attempts to examine how traits vary by breed group using a minimal data-ink ratio by removing all non-essential elements, minimal gridlines, no chart borders, and clean backgrounds
+
+## Technique
+
+-   We use a line graph with a standardized y axis to compare across breed groups. Line graphs allow us to compare across various discrete categories, in this case traits. We also deploy a small multiples technique to enable comparison within the eyespan. We remove colors to keep the ink to a minimal. Additionally for this plot, small multiples with common scales enable direct comparison across groups (Tufte principle). We iterated over this graph several times and found that importance of the traits to the overall presentation directed us to use traits as the group lines rather than the breed groups like we initially had designed this graphic.
+
+## Data
+
+-   We take the average trait (5 traits in total) by breed group and plot them, except for mixed breed since this group has a lot more variation.
+
+## Key Finding
+
+**Distinct behavioral signatures emerge:**
+
+-   **Sporting breeds:** Highest trainability (4.1) and affectionate (4.8) - bred for active partnership
+-   **Companion breeds:** Highest adaptability (3.4) and friendliness (4.1) - optimized for home life\
+-   **Herding breeds:** High scores across all dimensions (3.8-4.3) - versatile working dogs
+-   **Terrier breeds:** Moderate adaptability (2.9) but high energy (3.9) - independent hunters
+-   **Hound breeds:** High friendliness (4.3) but lower trainability (3.0) - independent trackers
+:::
+
+```{r characteristics-viz, fig.width=11, fig.height=9}
+# Prepare behavioral profile data for small multiples comparison
+behavior_data <- dogs |>
+  filter(breed_group_simple != "Mixed Breed") |>  # Focus on pure breeds 
+  select(breed, breed_group_simple, 
+         Adaptability = adaptability,
+         Friendliness = all_around_friendliness,
+         Affectionate = affectionate_with_family,
+         Trainability = trainability,
+         Energy = energy_level,
+         `Exercise Needs` = exercise_needs) |>
+  pivot_longer(cols = -c(breed, breed_group_simple), 
+               names_to = "trait", values_to = "score") |>
+  group_by(breed_group_simple, trait) |>
+  summarise(
+    mean_score = mean(score, na.rm = TRUE),
+    se = sd(score, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  ) |>
+  mutate(
+    trait = factor(trait, 
+                   levels = c("Adaptability", "Friendliness", "Affectionate",
+                              "Trainability", "Energy", "Exercise Needs"))
+  )
+
+# Create small multiples showing each group's behavioral profile
+p2 <- ggplot(behavior_data, aes(x = breed_group_simple, y = mean_score, 
+                                group = trait)) +
+  geom_hline(yintercept = 3, linetype = "dashed", 
+             color = "gray50", alpha = 0.5) +
+  geom_line(color = "black", size = 1.2) +
+  geom_point(size = 2, alpha = 0.9) +
+  scale_y_continuous(limits = c(1, 5), breaks = seq(1, 5, 1)) +
+  facet_wrap(~trait, ncol=3) +
+  labs(
+    title = "Behavioral Profiles by Breed Group",
+    subtitle = "Dashed line = midpoint (3.0)",
+    x = "",
+    y = "Average Score (1-5 scale)") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    panel.spacing = unit(1, "lines")
+  )
+
+p2
+```
+
+------------------------------------------------------------------------
+
+# Important Comparison Dimensions
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   Here we attempt to explore an important question on breed's life span as it relates to average size of the breed.
+
+## Technique
+
+-   We adapt a scatterplot to these data to reveal the following relationship and plot a loess form function smoothing line to show that this is not a linear relationship. Furthermore, we take breed's average weight on the log scale to expand the scale visually.
+
+## Data
+
+-   We use the average breed weight on the log scale on the x axis, and life span in years on the y axis. Additionally, we color code the points by the size of the breeds, and this allows the reader to quickly glance at the plot and visually see clustering in the data.
+
+## Key Finding
+
+**Physical Dimension (Size-Lifespan Tradeoff):**
+
+-   Strong negative correlation (r = -0.47)
+-   Very Small breeds: \~15 years average lifespan
+-   Very Large breeds: \~11 years average lifespan\
+-   **Insight:** Prospective owners face 4-year lifespan difference based on size preference
+:::
+
+```{r comparison-dimensions, fig.width=11, fig.height=7}
+# Create comprehensive comparison showing size-lifespan tradeoff
+
+# Panel A: Size vs Lifespan (physical tradeoff)
+dogs |>
+  ggplot(aes(x = avg_weight, y = avg_life_span_years, color = breed_size)) +
+  geom_point(alpha = 0.6, size = 2.5) +
+  geom_smooth(aes(group = 1), method = "loess", se = TRUE, color = "gray20", 
+              linetype = "dashed", linewidth = 0.8, alpha = 0.3) +
+  scale_color_viridis_d(option = "mako", begin = 0.2, end = 0.9, name = "Breed Size") +
+  scale_x_continuous(trans = "log10", labels = comma) +
+  labs(
+    title = "Critical Physical Tradeoff: Size vs. Lifespan",
+    subtitle = "Larger breeds have shorter lifespans (r = -0.47, p < 0.001)",
+    x = "Weight (lbs, log scale)",
+    y = "Life Expectancy (years)") +
+  theme(legend.position = "bottom")
+
+
+```
+
+------------------------------------------------------------------------
+
+# Breed Comparison Tool
+
+## Compare 2-4 Breeds on Behavioral Traits
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   This complex interactive visual allows users to select 2 to 4 breeds for comparison on behavioral traits using a radar graph. The radar chart updates automatically as the user makes selection. The primary goal is for users to discover breeds with their behavioral preference.
+
+## Technique, how to Read the Radar Chart
+
+**Visual Encoding:**
+
+-   **Distance from center** = Score strength (1 = center, 5 = outer edge)
+
+-   **Larger area** = More well-rounded breed across all traits -
+
+-   **Similar shapes** = Similar behavioral profiles
+
+-   **Overlapping areas** = Breeds are comparable on those dimensions
+
+**Interactive Features:** - Select breeds from drop down menu
+
+1.  Chart updates automatically
+
+2.  Hover over points for exact values
+
+3.  Legend toggle: Click breed names to show/hide - Zoom and pan available
+
+## Data
+
+-   We use 8 behavioral indicators that were scored for each breed and present them in this graph. We limit a comparison to 4 breeds at a time so that the user is not overwhelmed by the graphic.
+
+## Key Finding
+
+-   This tool is effective at showing multidimensions of factors for use with comparison across breeds, giving the user a positive experience by reducing cognitive burden when staring at several graphics.
+:::
+
+```{r interactive-radar-setup}
+
+# Prepare data for selection
+radar_breeds <- dogs |>
+  filter(!is.na(adaptability)) |>
+  select(
+    breed,
+    breed_group_simple,
+    breed_size,
+    Adaptability = adaptability,
+    Friendliness = all_around_friendliness,
+    Trainability = trainability,
+    Energy = energy_level,
+    `Exercise Needs` = exercise_needs,
+    `Kid Friendly` = kid_friendly,
+    `Dog Friendly` = dog_friendly,
+    Intelligence = intelligence
+  ) |>
+  arrange(breed)
+```
+
+::: {style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;"}
+### Select Breeds to Compare (2-4 breeds)
+
+```{r breed-selectors}
+
+# Create a clean interface for breed selection
+div(
+  style = "display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;",
+  
+  div(
+    style = "background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);",
+    tags$label("Breed 1:", style = "font-weight: 600; color: #2C3E50; display: block; margin-bottom: 8px;"),
+    tags$select(
+      id = "breed1",
+      class = "form-control",
+      style = "width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 4px;",
+      onchange = "updateRadarChart()",
+      tags$option("Labrador Retriever", selected = TRUE),
+      lapply(sort(unique(radar_breeds$breed)), function(b) {
+        tags$option(b, selected = (b == "Labrador Retriever"))
+      })
+    )
+  ),
+  
+  div(
+    style = "background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);",
+    tags$label("Breed 2:", style = "font-weight: 600; color: #2C3E50; display: block; margin-bottom: 8px;"),
+    tags$select(
+      id = "breed2",
+      class = "form-control",
+      style = "width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 4px;",
+      onchange = "updateRadarChart()",
+      tags$option("German Shepherd Dog", selected = TRUE),
+      lapply(sort(unique(radar_breeds$breed)), function(b) {
+        tags$option(b, selected = (b == "German Shepherd Dog"))
+      })
+    )
+  ),
+  
+  div(
+    style = "background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);",
+    tags$label("Breed 3:", style = "font-weight: 600; color: #2C3E50; display: block; margin-bottom: 8px;"),
+    tags$select(
+      id = "breed3",
+      class = "form-control",
+      style = "width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 4px;",
+      onchange = "updateRadarChart()",
+      tags$option("Golden Retriever", selected = TRUE),
+      lapply(sort(unique(radar_breeds$breed)), function(b) {
+        tags$option(b, selected = (b == "Golden Retriever"))
+      })
+    )
+  ),
+  
+  div(
+    style = "background: white; padding: 15px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);",
+    tags$label("Breed 4 (Optional):", style = "font-weight: 600; color: #2C3E50; display: block; margin-bottom: 8px;"),
+    tags$select(
+      id = "breed4",
+      class = "form-control",
+      style = "width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 4px;",
+      onchange = "updateRadarChart()",
+      tags$option("None", value = "", selected = FALSE),
+      tags$option("Beagle", selected = TRUE),
+      lapply(sort(unique(radar_breeds$breed)), function(b) {
+        if (b != "None") tags$option(b, selected = (b == "Beagle"))
+      })
+    )
+  )
+)
+```
+:::
+
+```{r interactive-radar-chart}
+# Convert data to JSON for JavaScript
+radar_data_json <- radar_breeds|>
+  select(-breed_group_simple, -breed_size)|>
+  jsonlite::toJSON()
+
+# Function to create initial radar chart
+create_initial_radar <- function() {
+  initial_breeds <- c("Labrador Retriever", "German Shepherd", "Golden Retriever")
+  
+  breed_data <- radar_breeds|>
+    filter(breed %in% initial_breeds)|>
+    select(-breed_group_simple, -breed_size)
+  
+  dimensions <- colnames(breed_data)[-1]
+  
+  fig <- plot_ly(type = 'scatterpolar', mode = 'lines+markers')
+  
+  colors <- viridis(length(initial_breeds), option = "turbo")
+  
+  for (i in 1:nrow(breed_data)) {
+    values <- as.numeric(breed_data[i, -1])
+    values <- c(values, values[1])
+    
+    fig <- fig|>
+      add_trace(
+        r = values,
+        theta = c(dimensions, dimensions[1]),
+        name = breed_data$breed[i],
+        fillcolor = paste0(colors[i], "40"),
+        line = list(color = colors[i], width = 3),
+        marker = list(size = 8, color = colors[i])
+      )
+  }
+  
+  fig <- fig|>
+    layout(
+      polar = list(
+        radialaxis = list(
+          visible = TRUE,
+          range = c(0, 5),
+          tickmode = "linear",
+          tick0 = 0,
+          dtick = 1,
+          showticklabels = TRUE,
+          tickfont = list(size = 11)
+        ),
+        angularaxis = list(
+          tickfont = list(size = 12, color = "#2C3E50")
+        )
+      ),
+      showlegend = TRUE,
+      legend = list(
+        orientation = "h",
+        x = 0.5,
+        xanchor = "center",
+        y = -0.15,
+        font = list(size = 12)
+      ),
+      title = list(
+        text = "Behavioral Profile Comparison",
+        font = list(size = 18, color = "#2C3E50")
+      ),
+      margin = list(t = 80, b = 100, l = 80, r = 80),
+      paper_bgcolor = 'white',
+      plot_bgcolor = 'white'
+    )
+  
+  return(fig)
+}
+
+fig <- create_initial_radar()
+fig <- fig|> config(displayModeBar = TRUE, displaylogo = FALSE)
+
+js_code <- paste0("
+  function(el) {
+    var radarData = ", radar_data_json, ";
+    
+    window.updateRadarChart = function() {
+      var breed1 = document.getElementById('breed1').value;
+      var breed2 = document.getElementById('breed2').value;
+      var breed3 = document.getElementById('breed3').value;
+      var breed4 = document.getElementById('breed4').value;
+      
+      var selectedBreeds = [breed1, breed2, breed3];
+      if (breed4 && breed4 !== 'None' && breed4 !== '') selectedBreeds.push(breed4);
+      
+      var filteredData = radarData.filter(function(d) {
+        return selectedBreeds.includes(d.breed);
+      });
+      
+      var dimensions = Object.keys(radarData[0]).filter(k => k !== 'breed');
+      
+      var colors = [
+        '#30123b', '#4662d7', '#36aad4', '#1fa187',
+        '#5db551', '#c4da3b', '#f9b641', '#fe8b26', 
+        '#d64837', '#a52c60', '#781c6d'
+      ];
+      
+      var traces = filteredData.map(function(breed, idx) {
+        var values = dimensions.map(function(d) { return breed[d]; });
+        values.push(values[0]);
+        
+        var theta = dimensions.slice();
+        theta.push(theta[0]);
+        
+        return {
+          type: 'scatterpolar',
+          r: values,
+          theta: theta,
+          name: breed.breed,
+          mode: 'lines+markers',
+          fill: 'toself',
+          fillcolor: colors[idx % colors.length] + '40',
+          line: {
+            color: colors[idx % colors.length],
+            width: 3
+          },
+          marker: {
+            size: 8,
+            color: colors[idx % colors.length]
+          }
+        };
+      });
+      
+      var layout = {
+        polar: {
+          radialaxis: {
+            visible: true,
+            range: [0, 5],
+            tickmode: 'linear',
+            tick0: 0,
+            dtick: 1,
+            showticklabels: true,
+            tickfont: { size: 11 }
+          },
+          angularaxis: {
+            tickfont: { size: 12, color: '#2C3E50' }
+          }
+        },
+        showlegend: true,
+        legend: {
+          orientation: 'h',
+          x: 0.5,
+          xanchor: 'center',
+          y: -0.15,
+          font: { size: 12 }
+        },
+        title: {
+          text: 'Behavioral Profile Comparison - ' + selectedBreeds.length + ' Breeds',
+          font: { size: 18, color: '#2C3E50' }
+        },
+        margin: { t: 80, b: 100, l: 80, r: 80 },
+        paper_bgcolor: 'white',
+        plot_bgcolor: 'white'
+      };
+      
+      Plotly.react(el, traces, layout, {displayModeBar: true, displaylogo: false});
+    };
+  }
+")
+
+htmlwidgets::onRender(fig, js_code)
+```
+
+------------------------------------------------------------------------
+
+# Geographic Origins
+
+::: {.callout-important icon="false"}
+## Visualization
+
+## Purpose
+
+-   This visual aims at assisting the user in exploring the distribution of breed origins around the world.
+
+## Technique
+
+-   We use an interactive map with bubble plots of breed origins. The bubble plot sizes correspond to the number of breeds from a particular country. A static map may have accomplished the same result; however, we went with an interactive plot as it allows users to select a bubble point and expand the list of breeds from the particular country. Given that this is an interactive plot, we also add other country level information such as the average dog weight, average lifespan, and primary dog breeds.
+
+## Data
+
+-   These data only contains the breed name and country of origin. Using the country of origin, we were able to use the tidygeocoder r package to easily convert country names to coordinates for this visual. We also averaged breed weight lifespan for each country to present in the visual.
+
+## Key Finding
+
+**Europe as the historical center:** - United Kingdom, Germany, and France show highest breed diversity - Reflects centuries of selective breeding traditions - Continental Europe developed specialized working breeds (herding, hunting, guarding) (source AKC).
+
+**North America's contribution:** - United States: 165 breeds (primarily modern mixed breeds and new developments) - Represents recent breed development and crossbreeding innovation (source AKC).
+
+**Modern insight:** While breeds originated globally, European standardization and American innovation dominate modern breed development (source AKC).
+:::
+
+```{r geographic-origins, fig.width=11, fig.height=7}
+# Prepare geographic data
+geo_data <- dogs |>
+  filter(!is.na(lat) & !is.na(long)) |>
+  group_by(country_origin, lat, long) |>
+  summarise(
+    n_breeds = n(),
+    breed_list = paste(head(breed, 15), collapse = ", "),
+    more_breeds = n() > 15,
+    avg_weight = mean(avg_weight, na.rm = TRUE),
+    avg_lifespan = mean(avg_life_span_years, na.rm = TRUE),
+    primary_groups = paste(unique(breed_group_simple)[1:3], collapse = ", "),
+    .groups = "drop"
+  )
+
+# Create color palette
+pal <- colorNumeric(
+  palette = viridis(100, option = "plasma", direction = 1),
+  domain = geo_data$n_breeds
+)
+
+# Create leaflet map
+leaflet(geo_data, width = "100%", height = "550px") |>
+  addProviderTiles(providers$CartoDB.Positron) |>
+  addCircleMarkers(
+    lng = ~long,
+    lat = ~lat,
+    radius = ~sqrt(n_breeds) * 3.5,
+    color = "#2C3E50",
+    fillColor = ~pal(n_breeds),
+    fillOpacity = 0.75,
+    weight = 2,
+    popup = ~paste0(
+      "<div style='font-family: Arial; font-size: 13px;'>",
+      "<b style='font-size: 15px; color: #2C3E50;'>", country_origin, "</b><br>",
+      "<hr style='margin: 5px 0; border: none; border-top: 1px solid #ddd;'>",
+      "<b>Number of Breeds:</b> ", n_breeds, "<br>",
+      "<b>Avg Weight:</b> ", round(avg_weight, 0), " lbs<br>",
+      "<b>Avg Lifespan:</b> ", round(avg_lifespan, 1), " years<br>",
+      "<b>Primary Groups:</b> ", primary_groups, "<br>",
+      "<hr style='margin: 5px 0; border: none; border-top: 1px solid #ddd;'>",
+      "<small><b>Sample Breeds:</b><br>", breed_list,
+      ifelse(more_breeds, " (...)", ""),
+      "</small>",
+      "</div>"
+    ),
+    label = ~paste0(country_origin, ": ", n_breeds, " breeds"),
+    labelOptions = labelOptions(
+      style = list("font-family" = "Arial", "font-size" = "12px")
+    )
+  ) |>
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = ~n_breeds,
+    title = "Number of<br>Breeds",
+    opacity = 0.8,
+    labFormat = labelFormat(digits = 0)
+  ) |>
+  setView(lng = 10, lat = 35, zoom = 2.5)
+```
+
+------------------------------------------------------------------------
+
+# Summary & Recommendations
+
+### My motivation for this graphic is to simulate a data visualization presentation to Nestle Purina administrators where I play the role as a data scientist. Therefore, the next section assumes the audience are Purina administrators and conveys data visualization results along with recommendations.
+
+::: panel-tabset
+### Distribution
+
+**Finding:** Very Large breeds comprise 53% of recognized breeds, with Working and Mixed breeds heavily represented in larger sizes.
+
+**Implication for Purina:** Product development should prioritize formulations for large breeds, while recognizing the growing market for small companion breeds (20% of total).
+
+### Characteristics
+
+**Finding:** Breed groups show distinct behavioral signatures that align with historical breeding purposes (Sporting = high trainability/energy, Companion = high adaptability/friendliness).
+
+**Implication for Purina:** Marketing and product positioning should emphasize group-specific traits. Nutritional needs likely differ by behavioral profiles (active vs. sedentary).
+
+### Comparison Dimensions
+
+**Finding:** Size-Lifespan tradeoff create a useful decision framework.
+
+**Implication for Purina:** Consumer education tools should focus on this dimension. Life-stage nutrition becomes especially important given lifespan variations.
+
+### Geographic Origins
+
+**Finding:** Europe remains the historical breeding center, but North America drives modern innovation. Regional specializations reflect climate and cultural needs.
+
+**Implication for Purina:** Global product strategies should account for regional breed preferences and historical breeding contexts.
+:::
+
+\
+
+------------------------------------------------------------------------
+
+## 
