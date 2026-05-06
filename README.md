@@ -8,6 +8,8 @@ An interactive data visualization dashboard exploring modern dog breeds through 
 
 **Author:** Kevin Linares · University of Maryland
 
+[Dashboard](https://klinares.github.io/Who_let_the_dogs_stat/code/dog_breed_explorer.html) 
+
 ------------------------------------------------------------------------
 
 \## What's in the Dashboard
@@ -25,7 +27,7 @@ The rendered HTML file is fully self-contained and interactive. It includes five
 
 ------------------------------------------------------------------------
 
-\## Data
+Data
 
 Source: [DogTime](https://dogtime.com/) via a [Kaggle dataset](https://www.kaggle.com/code/yonkotoshiro/dogs-breed) scraped and aggregated at the breed level. Ratings use a 1–5 scale (1 = low, 5 = high) for behavioral traits. Geographic coordinates were obtained using the `tidygeocoder` R package from country-of-origin fields.
 
@@ -33,7 +35,7 @@ The dataset covers AKC-registered breeds plus hybrid wolf breeds and emerging br
 
 ------------------------------------------------------------------------
 
-\## Repository Structure
+Repository Structure
 
 ```         
 Who_let_the_dogs_stat/
@@ -49,11 +51,11 @@ Who_let_the_dogs_stat/
 
 ------------------------------------------------------------------------
 
-\## Reproducing the Output
+Reproducing the Output
 
-\### Prerequisites
+Prerequisites
 
-R 4.x with the following packages (loaded via `pacman`):
+R 4.5 with the following packages (loaded via `pacman`):
 
 ``` r
 pacman::p_load(
@@ -70,7 +72,7 @@ tidyverse
 )
 ```
 
-### Data path
+Data path
 
 Update `repo_path` at the top of `dog_breed_explorer.qmd` to point to your local `data/` directory:
 
@@ -78,7 +80,7 @@ Update `repo_path` at the top of `dog_breed_explorer.qmd` to point to your local
 repo_path <- "path/to/your/data/"
 ```
 
-### Render
+Render
 
 ``` bash
 quarto render dog_breed_explorer.qmd --to html
@@ -88,7 +90,7 @@ The output is a fully self-contained `dog_breed_explorer.html` — no server, no
 
 ------------------------------------------------------------------------
 
-\## Key Findings
+Key Findings
 
 **Size & Lifespan Tradeoff** — Very small breeds live \~4 years longer on average than very large breeds (r = −0.47). Prospective owners face a real tradeoff between size preference and expected companionship time.
 
@@ -100,18 +102,9 @@ The output is a fully self-contained `dog_breed_explorer.html` — no server, no
 
 ------------------------------------------------------------------------
 
-\## Technical Notes
+Technical Notes
 
 The interactive radar chart converts breed data to JSON and passes it through inline JavaScript using `htmlwidgets::onRender()`, enabling dynamic updates without a Shiny server. Several strategies were iterated before landing on this approach — see the AI use statement in the source file for context.
 
-------------------------------------------------------------------------
 
-\## Course Context
 
-Final project for **SURV 752: Data Visualization**, University of Maryland Joint Program in Survey Methodology (JPSM), 2025. Dashboard framed as a simulated data science presentation to Nestlé Purina administrators.
-
-------------------------------------------------------------------------
-
-\## Author
-
-Kevin Linares — University of Maryland / Michigan ISR
